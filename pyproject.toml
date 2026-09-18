@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "windows-local-mcp"
-version = "0.1.2"
+version = "0.1.3"
 description = "Windows file and desktop tools over MCP stdio"
 requires-python = ">=3.13"
 license = "MIT"

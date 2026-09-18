@@ -1,7 +1,8 @@
 """Bounded Windows desktop operations using physical virtual-desktop coordinates.
 
 No clipboard, shell, UIAccess, elevation, hooks, or desktop switching is used.
-Input targets the current foreground application and remains subject to UIPI.
+Desktop input is locked to an explicitly focused target process and remains subject to UIPI.
+Screenshots never retarget input when the human switches to another application.
 """
 
 from __future__ import annotations
@@ -165,6 +166,10 @@ class _MONITORINFOEX(ctypes.Structure):
                 ("szDevice", wintypes.WCHAR * 32)]
 
 
+class _FILETIME(ctypes.Structure):
+    _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
+
+
 class Desktop:
     """One serialized desktop controller, with caller-supplied emergency stop checks.
 
@@ -182,8 +187,10 @@ class Desktop:
             raise TypeError("check must be callable.")
         self._check = check
         self.expected_foreground_hwnd = None
+        self.input_target: dict | None = None
         self._lock = threading.RLock()
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
+        self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         self._wts = ctypes.WinDLL("wtsapi32", use_last_error=True)
         self._configure()
         # This may return access denied when another component already selected DPI
@@ -230,6 +237,19 @@ class Desktop:
         self._window_callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
         u.EnumWindows.argtypes = [self._window_callback, wintypes.LPARAM]
         u.EnumWindows.restype = wintypes.BOOL
+        k = self._kernel32
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        k.OpenProcess.restype = wintypes.HANDLE
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        k.CloseHandle.restype = wintypes.BOOL
+        k.GetProcessTimes.argtypes = [
+            wintypes.HANDLE, ctypes.POINTER(_FILETIME), ctypes.POINTER(_FILETIME),
+            ctypes.POINTER(_FILETIME), ctypes.POINTER(_FILETIME)]
+        k.GetProcessTimes.restype = wintypes.BOOL
+        k.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        k.QueryFullProcessImageNameW.restype = wintypes.BOOL
+
         self._wts.WTSQuerySessionInformationW.argtypes = [
             wintypes.HANDLE, wintypes.DWORD, ctypes.c_int,
             ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
@@ -282,11 +302,89 @@ class Desktop:
         if expected is not None and int(self._user32.GetForegroundWindow() or 0) != expected:
             raise DesktopError("Foreground focus changed since the screenshot; take a fresh screenshot before input.")
 
+    def _window_pid(self, hwnd: int) -> int:
+        if not hwnd or not self._user32.IsWindow(hwnd):
+            raise DesktopError("Target window disappeared.")
+        pid = wintypes.DWORD()
+        if not self._user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) or not pid.value:
+            raise DesktopError("Cannot identify the target window process.")
+        return int(pid.value)
+
+    def _process_identity(self, pid: int) -> dict:
+        handle = self._kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            raise DesktopError("Cannot verify the target process identity.")
+        try:
+            creation, exit_time, kernel, user = _FILETIME(), _FILETIME(), _FILETIME(), _FILETIME()
+            if not self._kernel32.GetProcessTimes(
+                handle, ctypes.byref(creation), ctypes.byref(exit_time),
+                ctypes.byref(kernel), ctypes.byref(user)
+            ):
+                raise DesktopError("Cannot verify the target process creation time.")
+            image = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(image))
+            if not self._kernel32.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(length)):
+                raise DesktopError("Cannot verify the target process executable path.")
+            created = (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
+            return {"pid": int(pid), "creation_time_100ns": created,
+                    "image_path": os.path.normcase(image.value)}
+        finally:
+            self._kernel32.CloseHandle(handle)
+
+    def _target_summary(self) -> dict | None:
+        if not self.input_target:
+            return None
+        return {"hwnd": self.input_target["hwnd"], "pid": self.input_target["pid"],
+                "title": self.input_target["title"]}
+
+    def _target_matches_window(self, hwnd: int, *, verify_process: bool = False) -> bool:
+        target = self.input_target
+        if not target:
+            return False
+        try:
+            pid = self._window_pid(hwnd)
+            if pid != target["pid"]:
+                return False
+            if verify_process:
+                identity = self._process_identity(pid)
+                return (identity["creation_time_100ns"] == target["creation_time_100ns"]
+                        and identity["image_path"] == target["image_path"])
+            return True
+        except DesktopError:
+            return False
+
+    def _assert_input_target(self, hwnd: int | None = None, *, verify_process: bool = False) -> None:
+        target = self.input_target
+        if not target:
+            raise DesktopError(
+                "No desktop input target is locked. Call desktop_windows, then desktop_focus_window "
+                "before sending mouse or keyboard input.")
+        foreground = int(hwnd if hwnd is not None else (self._user32.GetForegroundWindow() or 0))
+        if not self._target_matches_window(foreground, verify_process=verify_process):
+            title = target.get("title") or "(untitled window)"
+            raise DesktopError(
+                f"Desktop input is locked to {title!r} (PID {target['pid']}). "
+                "The current foreground window belongs to another program or the target process changed. "
+                "Screenshots do not change the input target. Return to the locked application or explicitly "
+                "call desktop_focus_window to choose a new target.")
+
+    def target_summary(self) -> dict | None:
+        with self._operation():
+            return self._target_summary()
+
+    def validate_input_target(self, hwnd: int) -> dict:
+        with self._operation():
+            current = int(self._user32.GetForegroundWindow() or 0)
+            if current != hwnd:
+                raise DesktopError("Foreground focus changed since the screenshot; take a fresh screenshot before input.")
+            self._assert_input_target(hwnd, verify_process=True)
+            return self._target_summary() or {}
+
     def _held_inputs(self) -> list[str]:
         return [label for key, label in _INPUT_BLOCKERS
                 if self._user32.GetAsyncKeyState(key) & 0x8000]
 
-    def _wait_for_released_inputs(self) -> None:
+    def _wait_for_released_inputs(self, *, enforce_target: bool = True) -> None:
         # A click approving a tool, or a preceding SendInput key-up, can still be
         # in flight. Wait briefly for a stable idle state, without releasing any
         # keys on the user's behalf or overriding a real held key.
@@ -296,6 +394,8 @@ class Desktop:
         while True:
             self._checkpoint()
             self._assert_expected_foreground()
+            if enforce_target:
+                self._assert_input_target()
             held = self._held_inputs()
             now = time.monotonic()
             if held:
@@ -313,13 +413,15 @@ class Desktop:
             time.sleep(min(0.02, deadline - now))
 
     @contextmanager
-    def _operation(self, *, input_action: bool = False):
+    def _operation(self, *, input_action: bool = False, enforce_target: bool = True):
         with self._lock:
             try:
                 self._ensure_dpi()
                 self._checkpoint()
                 if input_action:
-                    self._wait_for_released_inputs()
+                    self._wait_for_released_inputs(enforce_target=enforce_target)
+                    if enforce_target:
+                        self._assert_input_target(verify_process=True)
                     image = self._capture(self._bounds())
                     try:
                         if max(high for low, high in image.convert("RGB").getextrema()) <= 8:
@@ -328,6 +430,8 @@ class Desktop:
                         image.close()
                     self._checkpoint()
                     self._assert_expected_foreground()
+                    if enforce_target:
+                        self._assert_input_target(verify_process=True)
                 yield
             finally:
                 if input_action:
@@ -372,12 +476,12 @@ class Desktop:
             return int(self._user32.GetForegroundWindow() or 0)
 
     def _window(self, hwnd: int) -> dict:
-        title, rect, pid = ctypes.create_unicode_buffer(1024), wintypes.RECT(), wintypes.DWORD()
+        title, rect = ctypes.create_unicode_buffer(1024), wintypes.RECT()
         self._user32.GetWindowTextW(hwnd, title, len(title))
         if not self._user32.GetWindowRect(hwnd, ctypes.byref(rect)):
             raise DesktopError("Window disappeared or its rectangle cannot be read.")
-        self._user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        return {"hwnd": int(hwnd), "title": title.value, "pid": pid.value,
+        pid = self._window_pid(hwnd)
+        return {"hwnd": int(hwnd), "title": title.value, "pid": pid,
                 "left": rect.left, "top": rect.top, "right": rect.right, "bottom": rect.bottom,
                 "minimized": bool(self._user32.IsIconic(hwnd)),
                 "foreground": hwnd == self._user32.GetForegroundWindow()}
@@ -406,7 +510,7 @@ class Desktop:
     @_clear_expected_foreground
     def focus_window(self, hwnd: int) -> dict:
         _integer(hwnd, "hwnd", 1, 2 ** (8 * ctypes.sizeof(ctypes.c_void_p)) - 1)
-        with self._operation(input_action=True):
+        with self._operation(input_action=True, enforce_target=False):
             if not self._user32.IsWindow(hwnd) or not self._user32.IsWindowVisible(hwnd):
                 raise ValueError("hwnd must identify an existing visible window.")
             if self._user32.IsIconic(hwnd):
@@ -419,7 +523,10 @@ class Desktop:
                 if time.monotonic() >= deadline:
                     raise DesktopError("Windows refused foreground focus; select the target window locally.")
                 time.sleep(0.025)
-            return self._window(hwnd)
+            info = self._window(hwnd)
+            identity = self._process_identity(info["pid"])
+            self.input_target = {"hwnd": int(hwnd), "title": info["title"], **identity}
+            return {**info, "input_target_locked": True}
 
     def _capture(self, bbox: tuple[int, int, int, int]):
         from PIL import ImageGrab
@@ -456,6 +563,8 @@ class Desktop:
                     "output_height": image.height, "scale": image.width / native_width,
                     "scale_x": image.width / native_width, "scale_y": image.height / native_height,
                     "foreground_hwnd": foreground,
+                    "input_target": self._target_summary(),
+                    "input_allowed": self._target_matches_window(foreground, verify_process=True),
                     "coordinate_space": "physical_virtual_desktop",
                     "coordinate_mapping": "x = left + image_x / scale_x; y = top + image_y / scale_y",
                 }
@@ -465,8 +574,8 @@ class Desktop:
     def _send(self, event: _INPUT, *, cleanup: bool = False) -> None:
         if not cleanup:
             self._checkpoint()
-            if event.type == 1 and not event.ki.dwFlags & 2:
-                self._assert_expected_foreground()
+            self._assert_expected_foreground()
+            self._assert_input_target()
         if self._user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_INPUT)) != 1:
             raise DesktopError("Windows refused input; locked or elevated applications cannot be controlled.")
 

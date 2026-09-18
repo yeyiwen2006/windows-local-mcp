@@ -133,6 +133,14 @@ class ForegroundObservationTests(unittest.TestCase):
     def setUp(self):
         self.desktop = object.__new__(Desktop)
         self.desktop.expected_foreground_hwnd = 10
+        self.desktop.input_target = {
+            "hwnd": 10, "pid": 100, "title": "Target",
+            "creation_time_100ns": 123, "image_path": r"c:\\target.exe",
+        }
+        self.desktop._window_pid = Mock(return_value=100)
+        self.desktop._process_identity = Mock(return_value={
+            "pid": 100, "creation_time_100ns": 123, "image_path": r"c:\\target.exe",
+        })
         self.desktop._lock = threading.RLock()
         self.desktop._ensure_dpi = Mock()
         self.desktop._checkpoint = Mock()
@@ -170,11 +178,49 @@ class ForegroundObservationTests(unittest.TestCase):
         self.assertIsNone(self.desktop.expected_foreground_hwnd)
 
 
+class TargetLockTests(unittest.TestCase):
+    def setUp(self):
+        self.desktop = object.__new__(Desktop)
+        self.desktop._user32 = Mock()
+        self.desktop._user32.GetForegroundWindow.return_value = 10
+        self.desktop.input_target = {
+            "hwnd": 10, "pid": 100, "title": "Editor",
+            "creation_time_100ns": 123, "image_path": r"c:\\editor.exe",
+        }
+        self.desktop._window_pid = Mock(side_effect=lambda hwnd: {10: 100, 11: 100, 20: 200}[hwnd])
+        self.desktop._process_identity = Mock(return_value={
+            "pid": 100, "creation_time_100ns": 123, "image_path": r"c:\\editor.exe",
+        })
+
+    def test_no_target_requires_explicit_focus(self):
+        self.desktop.input_target = None
+        with self.assertRaisesRegex(DesktopError, "No desktop input target"):
+            self.desktop._assert_input_target(10, verify_process=True)
+
+    def test_fresh_screenshot_of_another_program_does_not_retarget_input(self):
+        with self.assertRaisesRegex(DesktopError, "locked to"):
+            self.desktop._assert_input_target(20, verify_process=True)
+
+    def test_another_window_in_same_target_process_is_allowed(self):
+        self.desktop._assert_input_target(11, verify_process=True)
+
+    def test_pid_reuse_or_process_replacement_is_rejected(self):
+        self.desktop._process_identity.return_value = {
+            "pid": 100, "creation_time_100ns": 999, "image_path": r"c:\\editor.exe",
+        }
+        with self.assertRaisesRegex(DesktopError, "target process changed"):
+            self.desktop._assert_input_target(10, verify_process=True)
+
+    def test_public_target_summary_does_not_expose_executable_path(self):
+        self.assertEqual(self.desktop._target_summary(), {"hwnd": 10, "pid": 100, "title": "Editor"})
+
+
 class InputIdleTests(unittest.TestCase):
     def setUp(self):
         self.desktop = object.__new__(Desktop)
         self.desktop._checkpoint = Mock()
         self.desktop._assert_expected_foreground = Mock()
+        self.desktop._assert_input_target = Mock()
         self.desktop._user32 = Mock()
         self.now = 0.0
         self.clock = patch("windows_local_mcp.desktop.time.monotonic", side_effect=lambda: self.now)

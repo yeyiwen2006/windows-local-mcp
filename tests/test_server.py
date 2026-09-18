@@ -8,6 +8,7 @@ import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from windows_local_mcp.desktop import DesktopError
 from windows_local_mcp.guard import Guard
 from windows_local_mcp.server import Runtime
 
@@ -15,9 +16,21 @@ from windows_local_mcp.server import Runtime
 def test_observation_is_recent_and_single_use(tmp_path):
     r = Runtime(Guard(tmp_path / "state"))
     class FakeDesktop:
+        def __init__(self):
+            self.allowed = True
+            self.expected_foreground_hwnd = None
+
         def foreground_window(self):
             return 10
-    r._desktop = FakeDesktop()
+
+        def validate_input_target(self, hwnd):
+            if not self.allowed:
+                raise DesktopError("Desktop input is locked to another program")
+            assert hwnd == 10
+            return {"hwnd": 10, "pid": 100, "title": "Target"}
+
+    fake = FakeDesktop()
+    r._desktop = fake
     with pytest.raises(ValueError):
         r.observed_input("missing")
     r.observation = {"id": "ok", "time": time.monotonic(), "foreground_hwnd": 10}
@@ -27,6 +40,11 @@ def test_observation_is_recent_and_single_use(tmp_path):
     r.observation = {"id": "old", "time": time.monotonic() - 61, "foreground_hwnd": 10}
     with pytest.raises(ValueError, match="expired"):
         r.observed_input("old")
+    fake.allowed = False
+    r.observation = {"id": "other-program", "time": time.monotonic(), "foreground_hwnd": 10}
+    with pytest.raises(DesktopError, match="locked"):
+        r.observed_input("other-program")
+    fake.allowed = True
     r.observation = {"id": "changed", "time": time.monotonic(), "foreground_hwnd": 11}
     with pytest.raises(ValueError, match="Foreground"):
         r.observed_input("changed")

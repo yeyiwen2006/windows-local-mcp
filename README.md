@@ -1,6 +1,6 @@
 # Windows Local MCP
 
-让 ChatGPT 通过 MCP 读取本机文件、写入文件、查看屏幕并操作 Windows 桌面。默认允许访问当前 Windows 用户有权访问的本地磁盘位置，无需配置目录白名单。服务不会自动取得管理员权限。
+让 ChatGPT 在 Chat 模式中也可以通过 MCP 读取本机文件、写入文件、查看屏幕并操作 Windows 桌面，从而在完全符合 OpenAI 使用规范的前提下有效缓解 Codex 额度不足焦虑。默认允许访问当前 Windows 用户有权访问的本地磁盘位置，无需配置目录白名单。服务不会自动取得管理员权限。
 
 本机服务使用标准 MCP stdio，通过 OpenAI Secure MCP Tunnel 连接 ChatGPT。文件和桌面工具没有 HTTP 监听端口。官方隧道客户端会在本机回环地址提供健康检查，端口自动分配。
 
@@ -55,7 +55,7 @@ Secure MCP Tunnel 用于把私有、本地或防火墙后的 MCP 服务连接到
 | 文本和二进制读取 | `read_text_file`、`read_binary_file` |
 | 创建、覆盖、目录、移动和回收 | `write_file`、`create_directory`、`move_path`、`recycle_path` |
 | 显示器、窗口、截图 | `desktop_monitors`、`desktop_windows`、`desktop_screenshot` |
-| 激活窗口 | `desktop_focus_window` |
+| 激活窗口并锁定输入目标 | `desktop_focus_window` |
 | 鼠标 | `desktop_click`、`desktop_move`、`desktop_drag`、`desktop_scroll` |
 | 键盘与中文输入 | `desktop_keypress`、`desktop_type_text` |
 | 状态和暂停 | `service_status`、`service_pause` |
@@ -68,7 +68,7 @@ Secure MCP Tunnel 用于把私有、本地或防火墙后的 MCP 服务连接到
 
 删除工具只进入回收站，回收失败不会改成永久删除。驱动器根目录、用户主目录、主要系统目录及服务目录不能整体移动或回收。服务自身的源码禁止通过文件工具改写，`.local` 中的凭据、备份和审计也不向模型开放。
 
-桌面输入必须携带刚取得的截图编号。编号有效期 60 秒，使用一次即失效。工具核对前台窗口后才输入，并在输入过程中检查暂停和焦点。截图缩小时，要按元数据把图像坐标换算成屏幕物理坐标；多显示器坐标可能为负。每次输入后重新截图再决定下一步。执行期间尽量不要人工切换窗口或移动鼠标。
+桌面输入采用显式目标锁：必须先通过 `desktop_windows` 找到目标，再调用 `desktop_focus_window` 锁定其进程。截图不会改变输入目标；如果你手动切到其他程序，ChatGPT 仍可截图观察，但鼠标、滚轮和键盘输入会被拒绝。只有再次显式调用 `desktop_focus_window` 才会切换输入目标。目标身份内部同时校验 PID、进程创建时间和可执行文件路径，避免窗口句柄或 PID 被复用后误输入到其他程序。\n\n桌面输入仍必须携带刚取得的截图编号。编号有效期 60 秒，使用一次即失效。工具会同时核对截图时的前台窗口和已锁定目标，并在输入过程中持续检查暂停、焦点和目标进程。截图缩小时，要按元数据把图像坐标换算成屏幕物理坐标；多显示器坐标可能为负。每次输入后重新截图再决定下一步。你可以在任务期间手动切换到其他程序；切走后自动化输入会保持阻止状态，直到回到原目标或显式选择新目标。
 
 如果检测到修饰键或鼠标按钮按住，服务最多等待 1 秒，并要求连续 100 毫秒都已释放。仍不能继续时，错误会列出具体按键或按钮；服务不会代替你强行释放。松开后让模型重新截图再重试。这个检查适用于所有桌面输入，`Win+R` 也受同一规则约束。
 
@@ -100,4 +100,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup.ps1
 - [官方隧道客户端发布](https://github.com/openai/tunnel-client/releases/latest)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [Windows SendInput 权限与行为](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
-\n\n## 许可证\n\n本项目采用 MIT License，详见 `LICENSE`。\n
+
+
+## 许可证
+
+本项目采用 MIT License，详见 `LICENSE`。
