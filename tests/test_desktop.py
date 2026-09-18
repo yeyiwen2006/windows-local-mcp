@@ -134,10 +134,11 @@ class ForegroundObservationTests(unittest.TestCase):
         self.desktop = object.__new__(Desktop)
         self.desktop.expected_foreground_hwnd = 10
         self.desktop.input_target = {
-            "hwnd": 10, "pid": 100, "title": "Target",
+            "hwnd": 10, "root_hwnd": 10, "pid": 100, "title": "Target",
             "creation_time_100ns": 123, "image_path": r"c:\\target.exe",
         }
         self.desktop._window_pid = Mock(return_value=100)
+        self.desktop._root_owner = Mock(return_value=10)
         self.desktop._process_identity = Mock(return_value={
             "pid": 100, "creation_time_100ns": 123, "image_path": r"c:\\target.exe",
         })
@@ -184,10 +185,11 @@ class TargetLockTests(unittest.TestCase):
         self.desktop._user32 = Mock()
         self.desktop._user32.GetForegroundWindow.return_value = 10
         self.desktop.input_target = {
-            "hwnd": 10, "pid": 100, "title": "Editor",
+            "hwnd": 10, "root_hwnd": 10, "pid": 100, "title": "Editor",
             "creation_time_100ns": 123, "image_path": r"c:\\editor.exe",
         }
-        self.desktop._window_pid = Mock(side_effect=lambda hwnd: {10: 100, 11: 100, 20: 200}[hwnd])
+        self.desktop._window_pid = Mock(side_effect=lambda hwnd: {10: 100, 11: 100, 12: 100, 20: 200}[hwnd])
+        self.desktop._root_owner = Mock(side_effect=lambda hwnd: {10: 10, 11: 10, 12: 12, 20: 20}[hwnd])
         self.desktop._process_identity = Mock(return_value={
             "pid": 100, "creation_time_100ns": 123, "image_path": r"c:\\editor.exe",
         })
@@ -201,8 +203,12 @@ class TargetLockTests(unittest.TestCase):
         with self.assertRaisesRegex(DesktopError, "locked to"):
             self.desktop._assert_input_target(20, verify_process=True)
 
-    def test_another_window_in_same_target_process_is_allowed(self):
+    def test_owned_dialog_in_same_target_process_is_allowed(self):
         self.desktop._assert_input_target(11, verify_process=True)
+
+    def test_unrelated_top_level_window_in_same_process_is_rejected(self):
+        with self.assertRaisesRegex(DesktopError, "locked to"):
+            self.desktop._assert_input_target(12, verify_process=True)
 
     def test_pid_reuse_or_process_replacement_is_rejected(self):
         self.desktop._process_identity.return_value = {

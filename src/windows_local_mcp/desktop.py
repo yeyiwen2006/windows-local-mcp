@@ -212,6 +212,7 @@ class Desktop:
             "SendInput": ([wintypes.UINT, ctypes.POINTER(_INPUT), ctypes.c_int], wintypes.UINT),
             "GetAsyncKeyState": ([ctypes.c_int], wintypes.SHORT),
             "GetForegroundWindow": ([], wintypes.HWND),
+            "GetAncestor": ([wintypes.HWND, wintypes.UINT], wintypes.HWND),
             "IsWindow": ([wintypes.HWND], wintypes.BOOL),
             "IsWindowVisible": ([wintypes.HWND], wintypes.BOOL),
             "IsIconic": ([wintypes.HWND], wintypes.BOOL),
@@ -310,6 +311,12 @@ class Desktop:
             raise DesktopError("Cannot identify the target window process.")
         return int(pid.value)
 
+    def _root_owner(self, hwnd: int) -> int:
+        if not hwnd or not self._user32.IsWindow(hwnd):
+            raise DesktopError("Target window disappeared.")
+        root = int(self._user32.GetAncestor(hwnd, 3) or 0)  # GA_ROOTOWNER
+        return root or int(hwnd)
+
     def _process_identity(self, pid: int) -> dict:
         handle = self._kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
@@ -344,6 +351,8 @@ class Desktop:
         try:
             pid = self._window_pid(hwnd)
             if pid != target["pid"]:
+                return False
+            if self._root_owner(hwnd) != target["root_hwnd"]:
                 return False
             if verify_process:
                 identity = self._process_identity(pid)
@@ -525,7 +534,8 @@ class Desktop:
                 time.sleep(0.025)
             info = self._window(hwnd)
             identity = self._process_identity(info["pid"])
-            self.input_target = {"hwnd": int(hwnd), "title": info["title"], **identity}
+            self.input_target = {"hwnd": int(hwnd), "root_hwnd": self._root_owner(hwnd),
+                                 "title": info["title"], **identity}
             return {**info, "input_target_locked": True}
 
     def _capture(self, bbox: tuple[int, int, int, int]):
