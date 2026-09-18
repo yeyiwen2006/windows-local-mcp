@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "windows-local-mcp"
+version = "0.1.2"
+description = "Windows file and desktop tools over MCP stdio"
+requires-python = ">=3.13"
+license = "MIT"
+readme = "README.md"
+dependencies = ["mcp==1.30.0", "Pillow==12.3.0", "Send2Trash==2.1.0", "pywin32==312; sys_platform == 'win32'"]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[project.scripts]
+windows-local-mcp = "windows_local_mcp.server:main"
+windows-local-control = "windows_local_mcp.control:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
