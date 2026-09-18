@@ -1,4 +1,4 @@
-# ChatGPT Windows Local MCP
+# Windows Local MCP
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -13,6 +13,22 @@ This repository contains the source code, Windows startup and safety-control scr
 First-time setup requires a real Tunnel ID and runtime API key from your account. Enter secrets only through the local control menu. Do not commit them to GitHub or paste them into chat. Each computer and account should be connected and validated separately.
 
 Secure MCP Tunnel is used to connect local, private, or firewalled MCP servers to supported OpenAI products. This GitHub repository only distributes the source code. Available ChatGPT clients, workspace features, and model/tool combinations may change over time; follow the current OpenAI documentation and product UI.
+
+## Permissions and risks
+
+This is a **high-privilege local tool**. Once exposed to a model through MCP, it can read and modify files within the permissions of the current Windows user and can send mouse, wheel, and keyboard input to ordinary desktop applications.
+
+Important boundaries:
+
+- file access is close to the current Windows user's own access, not an independent sandbox;
+- desktop control can reach data visible to normal applications in the current user session, including private files, chat windows, and signed-in websites;
+- target locking, one-use screenshot IDs, the emergency pause, backups, and audit logs reduce mistakes, but **do not turn the model into a low-privilege process**;
+- other software running as the same Windows user can still read, modify, or interfere with that user's data and foreground windows;
+- lock screens, the UAC secure desktop, and higher-integrity applications are intentionally refused, but that is not a complete operating-system security boundary;
+- input already sent to Windows and disk writes already completed cannot be automatically undone;
+- runtime keys, Tunnel credentials, .local state, audit records, and private screenshots must not be committed to GitHub or pasted into chat.
+
+If you are not comfortable granting a model current-user-level file and desktop-control capability, do not run this service. Use a standard user account, keep the emergency pause available, and pause the service while handling sensitive accounts, payments, password managers, or important production data.
 
 ## Connect to ChatGPT
 
@@ -104,7 +120,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup.ps1
 
 The execution-policy flag applies only to that PowerShell process and does not change the global policy. A standard MCP client can also run .venv/Scripts/python.exe -m windows_local_mcp directly. That stdio entry point has no independent identity layer, so it should only be invoked by a trusted local client or the official Tunnel process.
 
-The Python distribution name remains windows-local-mcp even though the GitHub repository is named chatgpt-windows-local-mcp. Keeping the package name stable avoids breaking existing installs, commands, and upgrade paths.
+The Python distribution name remains windows-local-mcp even though the GitHub repository is named windows-local-mcp. Keeping the package name stable avoids breaking existing installs, commands, and upgrade paths.
 
 ## Official references
 

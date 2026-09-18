@@ -2,7 +2,7 @@
 
 [English](VALIDATION.en.md) · **简体中文**
 
-本文件记录 ChatGPT Windows Local MCP 的主要验证结果。它不是安全认证报告，也不代表所有 Windows 环境都已覆盖。
+本文件记录 Windows Local MCP 的主要验证结果。它不是安全认证报告，也不代表所有 Windows 环境都已覆盖。
 
 ## 0.1.3：桌面目标锁
 

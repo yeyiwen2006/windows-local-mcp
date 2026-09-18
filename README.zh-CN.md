@@ -1,4 +1,4 @@
-# ChatGPT Windows Local MCP
+# Windows Local MCP
 
 [English](README.en.md) · **简体中文**
 
@@ -13,6 +13,22 @@
 首次使用时，需要在本机提供实际 Tunnel ID 和 runtime API key。密钥只应通过本机控制菜单输入，不要提交到 GitHub，也不要粘贴到聊天中。每台电脑和每个账号都应单独完成连接与验证。
 
 Secure MCP Tunnel 用于把本地、私有或防火墙后的 MCP 服务连接到受支持的 OpenAI 产品；这个 GitHub 仓库只负责分发源码。ChatGPT 客户端、工作区和模型的可用能力会随产品更新而变化，请以 OpenAI 当前文档和界面为准。
+
+## 权限与风险
+
+这是一个**高权限本机工具**。一旦通过 MCP 暴露给模型，它可以在当前 Windows 用户本来拥有的权限范围内读取和修改文件，并通过普通桌面应用进行点击、滚动和键盘输入。
+
+需要特别理解以下边界：
+
+- 文件访问范围接近当前 Windows 用户自身的访问范围，而不是一个独立沙箱；
+- 桌面控制可以接触当前用户会话中普通应用能够看到的数据，包括私人文件、聊天窗口和已登录网站；
+- 目标窗口锁、一次性截图编号、暂停热键、备份和审计只能降低误操作与误输入风险，**不能把模型隔离成低权限进程**；
+- 同一 Windows 用户下运行的其他软件仍可能读取、修改或干扰该用户的数据与前台窗口；
+- 锁屏、UAC 安全桌面以及更高权限应用会被拒绝控制，但这不等于系统级安全边界；
+- 已经发送给 Windows 的输入和已经完成的磁盘写入无法自动撤销；
+- 不应把 runtime key、Tunnel 凭据、.local 目录、审计记录或私人截图提交到 GitHub 或粘贴到聊天中。
+
+如果你不接受模型拥有当前用户级文件与桌面控制能力，就不应运行这个服务。建议使用普通用户权限、保留紧急暂停热键，并在处理敏感账号、支付、密码管理器或重要生产数据时主动暂停服务。
 
 ## 连接 ChatGPT
 
@@ -104,7 +120,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup.ps1
 
 脚本的执行策略只对这一次 PowerShell 进程生效，不修改全局策略。标准 MCP 客户端也可以直接运行 .venv/Scripts/python.exe -m windows_local_mcp。这个 stdio 入口自身不做独立身份认证，因此调用者应当是受信任的本机客户端或官方 Tunnel 进程。
 
-Python 包名仍保留为 windows-local-mcp，即使 GitHub 仓库名为 chatgpt-windows-local-mcp；这样可以避免破坏现有安装、命令和升级路径。
+Python 包名仍保留为 windows-local-mcp，即使 GitHub 仓库名为 windows-local-mcp；这样可以避免破坏现有安装、命令和升级路径。
 
 ## 官方资料
 

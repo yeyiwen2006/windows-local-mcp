@@ -2,7 +2,7 @@
 
 **English** · [简体中文](VALIDATION.zh-CN.md)
 
-This document records the main validation results for ChatGPT Windows Local MCP. It is not a security certification and does not claim coverage of every Windows environment.
+This document records the main validation results for Windows Local MCP. It is not a security certification and does not claim coverage of every Windows environment.
 
 ## 0.1.3: desktop target lock
 

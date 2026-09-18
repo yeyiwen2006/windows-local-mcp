@@ -2,7 +2,7 @@
 
 **English** · [简体中文](SECURITY.zh-CN.md)
 
-ChatGPT Windows Local MCP can read and modify files available to the current Windows user and can operate the interactive desktop. Treat it as a high-trust local tool.
+Windows Local MCP can read and modify files available to the current Windows user and can operate the interactive desktop. Treat it as a high-trust local tool.
 
 ## Reporting a vulnerability
 

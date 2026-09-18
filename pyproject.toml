@@ -15,7 +15,7 @@ dependencies = ["mcp==1.30.0", "Pillow==12.3.0", "Send2Trash==2.1.0", "pywin32==
 test = ["pytest==9.1.1"]
 
 [project.urls]
-Repository = "https://github.com/yeyiwen2006/chatgpt-windows-local-mcp"
+Repository = "https://github.com/yeyiwen2006/windows-local-mcp"
 
 [project.scripts]
 windows-local-mcp = "windows_local_mcp.server:main"

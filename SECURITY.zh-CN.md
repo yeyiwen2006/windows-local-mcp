@@ -2,7 +2,7 @@
 
 [English](SECURITY.en.md) · **简体中文**
 
-ChatGPT Windows Local MCP 可以读取和修改当前 Windows 用户有权访问的文件，也可以操作交互式桌面，因此应当把它视为高信任级别的本机工具。
+Windows Local MCP 可以读取和修改当前 Windows 用户有权访问的文件，也可以操作交互式桌面，因此应当把它视为高信任级别的本机工具。
 
 ## 报告安全问题
 
