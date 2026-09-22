@@ -134,3 +134,7 @@ Python 包名仍保留为 windows-local-mcp，即使 GitHub 仓库名为 windows
 ## 许可证
 
 MIT License，详见 [LICENSE](LICENSE)。
+
+## 本机命令执行（0.2.0）
+
+新增 `command_start`、`command_poll`、`command_cancel`，可直接运行本机进程，无需终端前台。默认禁用，须在本机确认开启；不自动提权，也不是沙箱。详见[使用方法、边界、取消和安装要求](docs/commands.md)。

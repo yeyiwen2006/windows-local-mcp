@@ -7,8 +7,21 @@ from .guard import Guard, state_directory
 
 def main():
     parser = argparse.ArgumentParser(description="Local operator control for Windows Local MCP")
-    parser.add_argument("action", choices=["pause", "resume", "status"])
+    parser.add_argument("action", choices=["pause", "resume", "status", "commands-enable", "commands-disable"])
+    parser.add_argument("--acknowledge-current-user-access", action="store_true")
     args = parser.parse_args()
+    if args.action in ("commands-enable", "commands-disable"):
+        if args.action == "commands-enable" and not args.acknowledge_current_user_access:
+            parser.error("Enabling commands requires --acknowledge-current-user-access locally")
+        guard = Guard()
+        marker = guard.state / "COMMANDS_ENABLED"
+        if args.action == "commands-enable":
+            marker.write_text("current-user commands explicitly enabled by local operator\n", encoding="utf-8")
+            print("Local commands enabled. Existing pause state is unchanged.")
+        else:
+            marker.unlink(missing_ok=True)
+            print("Local commands disabled; running command jobs will terminate.")
+        return
     state = state_directory()
     state.mkdir(parents=True, exist_ok=True)
     if args.action == "pause":

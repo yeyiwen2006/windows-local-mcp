@@ -134,3 +134,7 @@ The Python distribution name remains windows-local-mcp even though the GitHub re
 ## License
 
 MIT License. See [LICENSE](LICENSE).
+
+## Opt-in local commands (0.2.0)
+
+`command_start`, `command_poll`, and `command_cancel` execute bounded current-user processes without desktop focus. Disabled by default; local acknowledgement is required. Not a sandbox. See [command execution, limits, cancellation and installation](docs/commands.md).
