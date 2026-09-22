@@ -2,9 +2,9 @@
 
 [简体中文](README.zh-CN.md) · [English](README.en.md)
 
-**中文：** 让 ChatGPT 在 Chat 模式中也可以通过 MCP 读取本机文件、写入文件、查看屏幕并操作 Windows 桌面，从而在完全符合 OpenAI 使用规范的前提下有效缓解 Codex 额度不足焦虑。
+**中文：** 让 ChatGPT 在 Chat 模式中通过 MCP 读取和写入本机文件、查看并操作 Windows 桌面，并在本机明确授权后直接运行 Git、构建、测试等命令，无需依赖终端窗口焦点。命令以当前 Windows 用户权限运行，不自动提权，也不是操作系统沙箱。
 
-**English:** Give ChatGPT in Chat mode MCP-based access to local files, file writes, screen viewing, and Windows desktop control, helping ease concerns about running short on Codex quota while operating within OpenAI's usage policies.
+**English:** Give ChatGPT in Chat mode MCP-based access to local file reads/writes and Windows desktop control, plus opt-in direct execution of Git, build, test, and other local commands without terminal focus. Commands run with the current Windows user's permissions, do not elevate automatically, and are not an OS sandbox.
 
 - 中文完整说明：[README.zh-CN.md](README.zh-CN.md)
 - Full English documentation: [README.en.md](README.en.md)

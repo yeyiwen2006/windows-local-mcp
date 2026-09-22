@@ -2,7 +2,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-Give ChatGPT in Chat mode MCP-based access to local files, file writes, screen viewing, and Windows desktop control, helping ease concerns about running short on Codex quota while operating within OpenAI's usage policies. By default, the service can access local disk locations that the current Windows user can already access. It does not require a separate directory allowlist and does not automatically gain administrator privileges.
+Give ChatGPT in Chat mode MCP-based access to local file reads/writes and Windows desktop control, plus opt-in direct execution of Git, build, test, and other local commands without terminal focus. By default, the service can access local disk locations that the current Windows user can already access. It does not require a separate directory allowlist; command execution uses the current Windows user's permissions, does not automatically elevate, and is not an OS sandbox.
 
 The local service speaks standard MCP over stdio and connects to ChatGPT through OpenAI Secure MCP Tunnel. The file and desktop tools do not expose their own HTTP listener. The official Tunnel client only exposes a loopback health endpoint with an automatically assigned port.
 
