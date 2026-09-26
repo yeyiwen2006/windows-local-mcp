@@ -69,6 +69,8 @@ Auto-connect installs a scheduled task for the current user. After Windows sign-
 | --- | --- |
 | File metadata and directories | file_info, list_directory |
 | Text and binary reads | read_text_file, read_binary_file |
+| Recursive filename and text search | search_files, search_text |
+| Exact partial edits with a version check | edit_text_file |
 | Create, replace, mkdir, move, recycle | write_file, create_directory, move_path, recycle_path |
 | Displays, windows, screenshots | desktop_monitors, desktop_windows, desktop_screenshot |
 | Focus a window and lock the input target | desktop_focus_window |
@@ -138,3 +140,7 @@ MIT License. See [LICENSE](LICENSE).
 ## Opt-in local commands (0.2.0)
 
 `command_start`, `command_poll`, and `command_cancel` execute bounded current-user processes without desktop focus. Disabled by default; local acknowledgement is required. Not a sandbox. See [command execution, limits, cancellation and installation](docs/commands.md).
+
+## File editing and search (0.3.0)
+
+Use `search_files` or `search_text` to narrow the scope, then inspect text with `read_text_file` and pass that exact string `version` as `edit_text_file.expected_version`. Editing requires one unique exact match; reread after a conflict. Changed files are backed up, and untouched bytes, BOM and UTF-16 byte order are retained. Searches have result, scan and time limits; inspect skipped/truncated fields. These three tools do not require command opt-in. See [parameters, encodings and boundaries](docs/file-tools.md).

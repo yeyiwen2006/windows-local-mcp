@@ -4,6 +4,18 @@
 
 This document records the main validation results for Windows Local MCP. It is not a security certification and does not claim coverage of every Windows environment.
 
+## 0.3.0 file editing and search (2026-09-26)
+
+The isolated Windows 11 / Python 3.13.5 suite recorded **119 passed, 32 subtests passed, 1 skipped**. The skipped case requires local symbolic-link creation privileges.
+
+The same source passed [GitHub Actions Windows regression](https://github.com/yeyiwen2006/windows-local-mcp/actions/runs/36217317468) with **120 passed, 32 subtests passed, no skips**, including the symbolic-link case.
+
+New cases cover unique exact matching and overlapping ambiguity, Chinese/emoji, UTF-8 BOM, UTF-16 byte order, GB18030, newlines, version conflicts, backup failure, external mutation, pause, protected paths, search result/byte/entry/time limits, and content-free audit records. A real MCP stdio workflow covers discovery, search, read, edit, backup, stale-version rejection and pause; its macOS entry point runs only on a native runner.
+
+Independent static code review completed. Tests use separate checkouts and synthetic temporary files and do not upgrade a running installation. See [file tool contracts](docs/file-tools.md).
+
+The 0.2.0 command results are retained in [command validation](docs/command-validation.md).
+
 ## 0.1.3: desktop target lock
 
 On September 18, 2026, the project was updated to address a failure mode in which desktop input could follow the user to a newly foregrounded application after a manual window switch.
@@ -73,6 +85,6 @@ Credentials are not committed to the repository. .local, virtual environments, b
 
 ## Current version
 
-Source version: 0.1.3
+Source version: 0.3.0
 
 See [SECURITY.en.md](SECURITY.en.md) for security guidance.

@@ -12,9 +12,26 @@ import tempfile
 from uuid import uuid4
 
 from .guard import Guard, PROJECT
+from .text_edit import replace_text_bytes
 
 MAX_READ = 1024 * 1024
 MAX_WRITE = 8 * 1024 * 1024
+
+
+def _version(s: os.stat_result) -> str:
+    """Opaque, best-effort file version; never a content hash."""
+    return "v1:" + ":".join(str(getattr(s, field)) for field in
+                            ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns"))
+
+
+def _verify_snapshot(p: Path, stream, before: os.stat_result, opened: os.stat_result) -> None:
+    # On Windows/Python 3.13 stat and fstat can use different ctime semantics.
+    # Compare each source against itself, plus their shared file identity/data.
+    identity = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+    if (any(getattr(before, field) != getattr(opened, field) for field in identity)
+            or _version(os.fstat(stream.fileno())) != _version(opened)
+            or _version(p.stat()) != _version(before)):
+        raise ValueError("File changed while it was being read; read it again")
 
 
 def lexical_local_path(value: str) -> Path:
@@ -81,8 +98,9 @@ class Files:
     def info(self, path: str) -> dict:
         p = self.path(path)
         s = p.stat()
-        return {"path": str(p), "directory": p.is_dir(), "bytes": s.st_size,
-                "modified_ns": s.st_mtime_ns, "created_ns": s.st_ctime_ns}
+        return {"path": str(p), "directory": stat.S_ISDIR(s.st_mode), "bytes": s.st_size,
+                "modified_ns": s.st_mtime_ns, "created_ns": s.st_ctime_ns,
+                "version": _version(s)}
 
     def list_directory(self, path: str, limit: int = 200, offset: int = 0) -> dict:
         if not 1 <= limit <= 1000 or offset < 0 or offset > 100000:
@@ -126,7 +144,12 @@ class Files:
         p = self.path(path)
         self.regular(p)
         lines, size, next_line = [], 0, None
+        before = p.stat()
         with p.open("r", encoding=encoding, errors="strict", newline="") as f:
+            opened = os.fstat(f.fileno())
+            if not stat.S_ISREG(opened.st_mode):
+                raise ValueError("A regular file is required")
+            _verify_snapshot(p, f, before, opened)
             for number in range(1, start_line + max_lines + 1):
                 self.guard.check()
                 line = f.readline(MAX_READ + 1)
@@ -141,8 +164,41 @@ class Files:
                     break
                 lines.append(line)
                 size += len(line)
+            _verify_snapshot(p, f, before, opened)
         return {"path": str(p), "text": "".join(lines), "start_line": start_line,
-                "lines": len(lines), "next_line": next_line, "encoding": encoding}
+                "lines": len(lines), "next_line": next_line, "encoding": encoding,
+                "modified_ns": before.st_mtime_ns, "version": _version(before)}
+
+    def edit_text(self, path: str, old_text: str, new_text: str, expected_version: str,
+                  encoding: str = "utf-8-sig") -> dict:
+        if not isinstance(expected_version, str) or not expected_version:
+            raise ValueError("expected_version from a recent read_text_file is required")
+        p = self.path(path, mutation=True)
+        self.regular(p)
+        self.guard.check()
+        before = p.stat()
+        with p.open("rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode):
+                raise ValueError("A regular file is required")
+            _verify_snapshot(p, stream, before, opened)
+            if _version(before) != expected_version:
+                raise ValueError("File changed since it was read; read it again before editing")
+            if before.st_size > MAX_WRITE:
+                raise ValueError("Text edit limit is 8 MiB")
+            data = stream.read(MAX_WRITE + 1)
+            if len(data) > MAX_WRITE:
+                raise ValueError("Text edit limit is 8 MiB")
+            _verify_snapshot(p, stream, before, opened)
+        updated, summary = replace_text_bytes(data, old_text, new_text, encoding)
+        self.guard.check()
+        if not summary["changed"]:
+            if _version(p.stat()) != expected_version:
+                raise ValueError("File changed since it was read; read it again before editing")
+            return {"path": str(p), "bytes": len(data), "backup_path": None,
+                    "modified_ns": before.st_mtime_ns, "version": expected_version, **summary}
+        result = self._write_bytes(path, updated, overwrite=True, expected_version=expected_version)
+        return {**result, **summary}
 
     def backup(self, p: Path) -> str:
         self.regular(p)
@@ -186,6 +242,11 @@ class Files:
                 raise ValueError("Invalid base64 data") from exc
         else:
             raise ValueError("encoding must be utf-8 or base64")
+        return self._write_bytes(path, data, overwrite, expected_modified_ns)
+
+    def _write_bytes(self, path: str, data: bytes, overwrite: bool = False,
+                     expected_modified_ns: int | None = None,
+                     expected_version: str | None = None) -> dict:
         if len(data) > MAX_WRITE:
             raise ValueError("Write limit is 8 MiB per call")
         p = self.path(path, mutation=True)
@@ -197,6 +258,8 @@ class Files:
             self.ordinary_overwrite(p)
         if expected_modified_ns is not None and (before is None or before.st_mtime_ns != expected_modified_ns):
             raise ValueError("File changed since it was read; read it again before replacing")
+        if expected_version is not None and (before is None or _version(before) != expected_version):
+            raise ValueError("File changed since it was read; read it again before editing")
         backup = self.backup(p) if before else None
         fd, temp_name = tempfile.mkstemp(prefix=".mcp-", suffix=".tmp", dir=p.parent)
         temp = Path(temp_name)
@@ -217,7 +280,7 @@ class Files:
             self.guard.check()
             if before:
                 current = p.stat()
-                if (current.st_mtime_ns, current.st_size, current.st_ino) != (before.st_mtime_ns, before.st_size, before.st_ino):
+                if _version(current) != _version(before):
                     raise ValueError("File changed during backup; original left untouched")
                 self.guard.check()
                 os.replace(temp, p)
@@ -229,8 +292,9 @@ class Files:
         finally:
             if temp.exists():
                 temp.unlink()
+        after = p.stat()
         return {"path": str(p), "bytes": len(data), "backup_path": backup,
-                "modified_ns": p.stat().st_mtime_ns}
+                "modified_ns": after.st_mtime_ns, "version": _version(after)}
 
     def mkdir(self, path: str) -> dict:
         p = self.path(path, mutation=True)
