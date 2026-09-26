@@ -69,6 +69,8 @@ Secure MCP Tunnel 用于把本地、私有或防火墙后的 MCP 服务连接到
 | --- | --- |
 | 文件信息和目录 | file_info、list_directory |
 | 文本和二进制读取 | read_text_file、read_binary_file |
+| 递归文件名和文本搜索 | search_files、search_text |
+| 带版本检查的精确局部编辑 | edit_text_file |
 | 创建、覆盖、目录、移动和回收 | write_file、create_directory、move_path、recycle_path |
 | 显示器、窗口和截图 | desktop_monitors、desktop_windows、desktop_screenshot |
 | 激活窗口并锁定输入目标 | desktop_focus_window |
@@ -138,3 +140,7 @@ MIT License，详见 [LICENSE](LICENSE)。
 ## 本机命令执行（0.2.0）
 
 新增 `command_start`、`command_poll`、`command_cancel`，可直接运行本机进程，无需终端前台。默认禁用，须在本机确认开启；不自动提权，也不是沙箱。详见[使用方法、边界、取消和安装要求](docs/commands.md)。
+
+## 文件编辑与搜索（0.3.0）
+
+先用 `search_files` 或 `search_text` 缩小范围，再用 `read_text_file` 读取所需正文，把同次读取返回的字符串 `version` 原样传给 `edit_text_file.expected_version`。编辑只接受唯一的精确匹配；冲突时重新读取。修改前备份，保留未修改字节、BOM 和 UTF-16 端序。搜索有结果数、扫描量和时间限制，需查看返回的跳过及截断信息。三个工具均不要求开启命令执行。详见[参数、编码与边界](docs/file-tools.md)。

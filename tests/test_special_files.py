@@ -7,13 +7,17 @@ from windows_local_mcp.files import Files
 from windows_local_mcp.guard import Guard
 
 
-def test_ads_is_retained_by_rejecting_overwrite(tmp_path):
+@pytest.mark.parametrize("edit", [False, True])
+def test_ads_is_retained_by_rejecting_overwrite(tmp_path, edit):
     p = tmp_path / "download.txt"
     p.write_text("original", encoding="utf-8")
     Path(str(p) + ":Zone.Identifier").write_text("[ZoneTransfer]\nZoneId=3", encoding="utf-8")
     fs = Files(Guard(tmp_path / "state"))
     with pytest.raises(ValueError, match="alternate data streams"):
-        fs.write(str(p), "new", overwrite=True)
+        if edit:
+            fs.edit_text(str(p), "original", "new", fs.info(str(p))["version"])
+        else:
+            fs.write(str(p), "new", overwrite=True)
     assert p.read_text(encoding="utf-8") == "original"
     assert "ZoneId=3" in Path(str(p) + ":Zone.Identifier").read_text(encoding="utf-8")
 
@@ -39,7 +43,8 @@ def test_reparse_point_rejected_before_resolve(tmp_path, monkeypatch):
         fs.path(str(tmp_path / "link"), mutation=True)
 
 
-def test_protected_dacl_is_preserved_on_overwrite(tmp_path):
+@pytest.mark.parametrize("edit", [False, True])
+def test_protected_dacl_is_preserved_on_overwrite(tmp_path, edit):
     import win32api
     import win32con
     import win32security
@@ -57,7 +62,10 @@ def test_protected_dacl_is_preserved_on_overwrite(tmp_path):
         win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
         None, None, acl, None)
     fs = Files(Guard(tmp_path / "state"))
-    fs.write(str(p), "replacement", overwrite=True)
+    if edit:
+        fs.edit_text(str(p), "private", "replacement", fs.info(str(p))["version"])
+    else:
+        fs.write(str(p), "replacement", overwrite=True)
     after = win32security.GetFileSecurity(str(p), win32security.DACL_SECURITY_INFORMATION)
     assert after.GetSecurityDescriptorControl()[0] & win32security.SE_DACL_PROTECTED
     result_acl = after.GetSecurityDescriptorDacl()
