@@ -8,6 +8,8 @@ This document records the main validation results for Windows Local MCP. It is n
 
 The isolated Windows 11 / Python 3.13.5 suite recorded **119 passed, 32 subtests passed, 1 skipped**. The skipped case requires local symbolic-link creation privileges.
 
+The same source passed [GitHub Actions Windows regression](https://github.com/yeyiwen2006/windows-local-mcp/actions/runs/36217317468) with **120 passed, 32 subtests passed, no skips**, including the symbolic-link case.
+
 New cases cover unique exact matching and overlapping ambiguity, Chinese/emoji, UTF-8 BOM, UTF-16 byte order, GB18030, newlines, version conflicts, backup failure, external mutation, pause, protected paths, search result/byte/entry/time limits, and content-free audit records. A real MCP stdio workflow covers discovery, search, read, edit, backup, stale-version rejection and pause; its macOS entry point runs only on a native runner.
 
 Independent static code review completed. Tests use separate checkouts and synthetic temporary files and do not upgrade a running installation. See [file tool contracts](docs/file-tools.md).
